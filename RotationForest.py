@@ -1,6 +1,6 @@
 import numpy as np
 from sklearn.decomposition import PCA
-from sklearn.tree import DecisionTreeClassifier
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 from scipy.stats import mode
 
 # An Implementation of the Rotation Forest Algorithm
@@ -31,7 +31,7 @@ class RotationTree:
         return rt
 
     def __init__(self, n_features=3, sample_prop=0.5, bootstrap=True):
-        self.model = DecisionTreeClassifier(criterion="gini",
+        self.model = DecisionTreeRegressor(criterion="mse",
                                             splitter="best",
                                             max_depth=None,
                                             min_samples_split=2,
@@ -39,8 +39,7 @@ class RotationTree:
                                             min_weight_fraction_leaf=0.,
                                             max_features=1.0,
                                             random_state=None,
-                                            max_leaf_nodes=None,
-                                            class_weight=None)
+                                            max_leaf_nodes=None)
         self.n_features = n_features
         self.sample_prop = sample_prop
         self.bootstrap = bootstrap
@@ -55,7 +54,7 @@ class RotationTree:
         # Apply transform and save rotation matrices
         transformed_partitions = []
         for partition in feature_partitions:
-            sampled_data = self.get_samples(partition, y)
+            sampled_data = self.get_samples_for_regression(partition, y)
             rotation_matrix = self.get_rotation_matrix(sampled_data)
             transformed_partitions.append(np.dot(partition, rotation_matrix))
 
@@ -88,6 +87,10 @@ class RotationTree:
         self.partition_nums = case_output
 
         return feature_output
+
+    def get_samples_for_regression(self, x, y):
+        # Returning the whole data set for regression
+        return x
 
     def get_samples(self, featureset, y):
         # Returns Bootstrapped Samples from a subset of features
@@ -197,6 +200,7 @@ class RotationForest:
                 tree = RotationTree(n_features=self.n_features,
                                     sample_prop=self.sample_prop,
                                     bootstrap=self.bootstrap)
+                print("Fitting Tree ", i, end="\r")
                 tree.fit(X, y)
                 self.trees.append(tree)
 
@@ -206,7 +210,7 @@ class RotationForest:
         for model in self.trees:
             all.append(model.predict(X))
         all = np.asarray(all)
-        preds = mode(all)[0].flatten()
+        preds = np.mean(all, axis=0)  # mode(all)[0].flatten()
 
         return preds
 
@@ -217,7 +221,7 @@ if __name__ == "__main__":
     # Under the current settings, Rotation Forest will usually (but not exclusively) outperform Random Forest.
     # However, it only performs better in some subset of all possible classification problems.
 
-    test_forest = True
+    test_forest = False
 
     if test_forest:
         from sklearn.datasets import make_classification
