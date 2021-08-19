@@ -48,6 +48,11 @@ class RotationTree:
         self.rotation_matrices = []
 
     def fit(self, X, y):
+        if self.bootstrap:
+            X, y = self.boot_sample(X, y)
+        else:
+            raise ValueError("Bootstrap not interpretable as Boolean")
+
         # Split up + Save features
         feature_partitions = self.partition_features(X)
 
@@ -60,15 +65,7 @@ class RotationTree:
 
         new_X = np.concatenate(transformed_partitions, axis=1)
 
-        if self.bootstrap:
-            xx, yy = self.boot_sample(new_X, y)
-            self.model.fit(xx, yy)
-
-        elif not self.bootstrap:
-            self.model.fit(new_X, y)
-
-        else:
-            raise ValueError("Bootstrap not interpretable as Boolean")
+        self.model.fit(new_X, y)
 
     def partition_features(self, x):
         """Returns list of randomly partitioned features"""
@@ -153,6 +150,16 @@ class RotationTree:
         new_X = np.concatenate(transformed_partitions, axis=1)
         return self.model.predict(new_X)
 
+
+def fit_tree_task(args):
+    X, y, i, n_features, sample_prop, bootstrap = args
+    tree = RotationTree(n_features=n_features,
+                        sample_prop=sample_prop,
+                        bootstrap=bootstrap)
+    print("Fitting Tree ", i, end="\r")
+    tree.fit(X.copy(), y.copy())
+    return tree
+
 class RotationForest:
     """
 
@@ -196,13 +203,10 @@ class RotationForest:
                 tree.fit(X, y)
                 self.trees.append(tree)
         else:
-            for i in range(self.n_trees):
-                tree = RotationTree(n_features=self.n_features,
-                                    sample_prop=self.sample_prop,
-                                    bootstrap=self.bootstrap)
-                print("Fitting Tree ", i, end="\r")
-                tree.fit(X, y)
-                self.trees.append(tree)
+            import multiprocessing as mp
+            pool = mp.Pool(mp.cpu_count())
+            self.trees = pool.map(fit_tree_task, [(X, y, i, self.n_features, self.sample_prop, self.bootstrap) for i in range(self.n_trees)])
+            pool.close()
 
     def predict(self, X):
         # Generate predictions array
